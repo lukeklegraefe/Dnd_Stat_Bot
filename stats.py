@@ -1,88 +1,93 @@
-import discord
-from discord.ext import commands
+import json
+import os
 import pandas as pd
-import csv
-import re
 import numpy as np
 import matplotlib.pyplot as plt
 
-API_TOKEN = 'API_TOKEN'
+class Character:
+    def __init__(self, name, damage, healing, totalRolls):
+        self.name = name
+        self.damage = damage
+        self.healing = healing
+        self.totalRolls = totalRolls
 
-df = pd.DataFrame(columns=['player', 'type', 'value'])
-characters = ["Player1", "Player2", "Player3", "Player4", "Player5", "Player6", "Player7", "Player8",]
-Damage = [0, 0, 0, 0, 0, 0, 0, 0]
-Healing = [0, 0, 0, 0, 0, 0, 0, 0]
+file = open('players-rolls.json')
+data = json.load(file)
+totalHealing = 0
 
-intents = discord.Intents.default()
-intents.message_content = True
-client = discord.Client(intents=intents)
-cmd = commands.Bot(command_prefix=".", intents=intents)
-guild = discord.Guild
+Damage = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+Healing = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+Saves = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+Checks = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-@client.event
-async def on_ready():
-    await client.change_presence(activity=discord.Game('.shutdown to terminate'))
+abilities = ['Acrobatics', 'Animal Handling', 'Arcana', 'Athletics', 'Deception', 'History', 'Insight', 'Intimidation', 'Investigation', 'Medicine', 'Nature', 'Perception', 'Performance', 'Religion', 'Sleight of Hand', 'Stealth', 'Survival']
 
-@client.event
-async def on_message(message):
-    if message.content == ".shutdown":
-        print("Closing...")
-        displayStats()
-        await client.close()
-        exit()
-    if str(message.channel) == "players-rolls":
-        handleEmbed(message.embeds)
+for roll in data:
+    if "damage" in roll["embeds"][0]["title"]:
+        rawValue = str(prop["value"])
+        i = rawValue.index('t')
+        val = rawValue[i:]
+        damage = 0
+        for char in val:
+            if char.isdigit():
+                damage += int(char)
+        Damage[idx] += damage
+        continue
+    elif "Save" in roll["embeds"][0]["title"]:
+        Saves[idx] += 1
+        continue
+    
+    for prop in roll["embeds"][0]["fields"]:
+        if "Damage" in prop["name"] and "Total" not in prop["name"]:
+            # add to damage
+            rawValue = str(prop["value"])
+            i = rawValue.index('t')
+            val = rawValue[i:]
+            damage = 0
+            for char in val:
+                if char.isdigit():
+                    damage += int(char)
+            print("DAMAGE ", damage)
+            Damage[idx] += damage
+        elif "Total" in prop["name"]:
+            print(prop["value"])
+        elif "Healing" in prop["name"]:
+            # add to healing
+            rawValue = str(prop["value"])
+            i = rawValue.index('t')
+            val = rawValue[i:]
+            healing = 0
+            for char in val:
+                if char.isdigit():
+                    healing += int(char)
+            Healing[idx] += healing
+    
+    abilityCheck = roll["embeds"][0]["title"].split('(')[0]
+    if abilityCheck in abilities:
+        Checks[idx] += 1
+print(Damage)
+print(Healing)
+file.close()
 
-def handleEmbed(embeds):
-    for embed in embeds:
-        e = embed.to_dict()
-        if "fields" not in e:
-            continue
-        player = e['author']['name']
-        playerIdx = characters.index(player)
+characters = ["Player1", "Player2", "Gambler", "Klaus", "Mori", "Neuma", "Percy", "Stick", "Verdan"]
 
-        if "damage" in str(e['title']).lower() or "smite" in str(e['title']).lower():
-            raw = str(e['fields'][0]['value'])
-            startPos = raw.index('t')
-            val = raw[startPos:]
-            values = [int(s) for s in re.findall(r'\b\d+\b', val)]
-            Damage[playerIdx] += sum(values)
-            print(player, " dealt ", sum(values), " damage.")
-            continue
+N = 9
+ind = np.arange(N)
+width = 0.2
 
-        for field in reversed(e['fields']):
-            raw = str(field['value'])
-            startPos = raw.index('t')
-            val = raw[startPos:]
-            values = [int(s) for s in re.findall(r'\b\d+\b', val)]
-            if "total" in str(field['name']).lower() or "Damage" in field['name']:
-                Damage[playerIdx] += sum(values)
-                print(player, " dealt ", sum(values), " damage.")
-                break
-            elif "healing" in str(field['name']).lower():
-                Healing[playerIdx] += sum(values)
-                print(player, " healed ", sum(values), " hitpoints.")
-                break
+fig, ax = plt.subplots()
+fig.set_size_inches(12, 8)
+dmg = plt.bar(ind, Checks, width=width, color='r', label='Ability Checks')
+heal = plt.bar(ind+width, Saves, width=width, color='b', label='Saving Throws')
+#saves = plt.bar(ind+width*2, Saves, width=width, color='g', label='Saving Throws')
+#checks = plt.bar(ind+width*3, Checks, width=width, color='orange', label='Ability Checks')
 
-def displayStats():
-    N = len(characters)
-    ind = np.arange(N)
-    width = 0.2
-
-    fig, ax = plt.subplots()
-    fig.set_size_inches(12, 8)
-    dmg = plt.bar(ind, Damage, width=width, color='orange', label='Damage')
-    heal = plt.bar(ind+width, Healing, width=width, color='b', label='Healing')
-
-    plt.xlabel("Character")
-    plt.ylabel("Value")
-    plt.title("Damage / Healing Distribution")
-    ax.set_xticks([0,1,2,3,4,5,6,7])
-    ax.set_xticklabels(characters)
-    ax.bar_label(dmg, padding=3)
-    ax.bar_label(heal, padding=3)
-    ax.legend()
-    plt.show()
-
-if __name__ == "__main__":
-    client.run(API_TOKEN)
+plt.xlabel("Character")
+plt.ylabel("Value")
+plt.title("Variety Pack Abilitiy Checks / Saving Throws Distribution")
+ax.set_xticks([0,1,2,3,4,5,6,7,8])
+ax.set_xticklabels(characters)
+ax.bar_label(dmg, padding=3)
+ax.bar_label(heal, padding=3)
+ax.legend()
+plt.show()
